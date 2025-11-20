@@ -1,0 +1,2 @@
+"""Domain DTO package."""
+
