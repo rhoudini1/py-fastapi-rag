@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.document.save_document import SaveDocumentUseCase
+from app.business.document.list_documents import ListDocumentsUseCase
 from app.domain.dto.request import UploadDocumentRequest
 from app.infra.database import get_db
 from app.infra.repositories import DocumentRepository
@@ -27,3 +28,24 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
+
+@router.get("/", summary="List all uploaded documents")
+async def list_documents(
+    page: int = 1,
+    limit: int = 10,
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        if page < 1:
+            raise HTTPException(status_code=400, detail="page must be >= 1")
+        if limit < 1 or limit > 100:
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+        
+        document_repository = DocumentRepository(session)
+        list_documents_use_case = ListDocumentsUseCase(document_repository)
+        
+        response = await list_documents_use_case.execute(page=page, limit=limit)
+        return JSONResponse(status_code=200, content=response.model_dump())
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
