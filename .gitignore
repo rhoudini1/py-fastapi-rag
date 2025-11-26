@@ -209,3 +209,4 @@ __marimo__/
 # Database
 documents.db
 uploaded_files/
+chroma_docs/
