@@ -6,6 +6,7 @@ from app.business.document.save_document import SaveDocumentUseCase
 from app.business.document.list_documents import ListDocumentsUseCase
 from app.domain.dto.request import UploadDocumentRequest
 from app.infra.database import get_db
+from app.infra.gateway import GeminiGateway
 from app.infra.repositories import DocumentRepository
 
 router = APIRouter(
@@ -21,7 +22,8 @@ async def upload_document(
 ):
     try:
         document_repository = DocumentRepository(session)
-        save_document_use_case = SaveDocumentUseCase(document_repository)
+        gemini_gateway = GeminiGateway()
+        save_document_use_case = SaveDocumentUseCase(document_repository, gemini_gateway)
         
         response = await save_document_use_case.execute(request)
         return JSONResponse(status_code=201, content=response.model_dump())

@@ -5,12 +5,18 @@ import uuid
 from app.domain.dto.request import UploadDocumentRequest
 from app.domain.dto.response import UploadDocumentResponse
 from app.domain.entities import Document
+from app.infra.gateway import GeminiGateway
 from app.infra.repositories import DocumentRepository
 
 
 class SaveDocumentUseCase:
-    def __init__(self, document_repository: DocumentRepository, upload_dir: str = "uploaded_files"):
+    def __init__(self,
+        document_repository: DocumentRepository,
+        gemini_gateway: GeminiGateway,
+        upload_dir: str = "uploaded_files"
+        ):
         self.document_repository = document_repository
+        self.gemini_gateway = gemini_gateway
         self.upload_dir = upload_dir
         os.makedirs(self.upload_dir, exist_ok=True)
 
@@ -43,6 +49,9 @@ class SaveDocumentUseCase:
 
         # Save document to database using repository
         saved_document = await self.document_repository.create(document)
+
+        # Index document using Gemini gateway
+        self.gemini_gateway.index_document(saved_document)
 
         return UploadDocumentResponse(
             id=saved_document.id,
