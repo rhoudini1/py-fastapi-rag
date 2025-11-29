@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.document.save_document import SaveDocumentUseCase
 from app.business.document.list_documents import ListDocumentsUseCase
-from app.domain.dto.request import UploadDocumentRequest
+from app.business.talk.retrieve_info import RetrieveInfoUseCase
+from app.domain.dto.request import RetrieveInfoRequest, UploadDocumentRequest
 from app.infra.database import get_db
 from app.infra.gateway import GeminiGateway
 from app.infra.repositories import DocumentRepository
@@ -29,6 +30,21 @@ async def upload_document(
         return JSONResponse(status_code=201, content=response.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@router.post("/talk", response_model=dict, summary="Talk to the documents")
+async def retrieve(
+    request: RetrieveInfoRequest,
+):
+    try:
+        gemini_gateway = GeminiGateway()
+        retrieve_info_use_case = RetrieveInfoUseCase(gemini_gateway)
+
+        response = await retrieve_info_use_case.execute(message=request.message)
+
+        return JSONResponse(status_code=201, content=response.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Retrieve failed: {str(e)}")
 
 
 @router.get("/", summary="List all uploaded documents")

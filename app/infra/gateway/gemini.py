@@ -5,6 +5,7 @@ from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.embeddings import Embeddings
+from langchain.agents.middleware import dynamic_prompt, ModelRequest
 
 from app.domain.config import settings
 from app.domain.entities import Document
@@ -66,15 +67,13 @@ class GeminiGateway:
     _genai_model: Optional[genai.GenerativeModel] = None
     
     def __init__(self):
-        """Initialize GeminiGateway. Embeddings and vector store are reused across instances."""
-        # Configure Google Generative AI
         genai.configure(api_key=settings.google_api_key)
         
-        # Initialize Gemini model for chat (only instantiated once at class level)
         if GeminiGateway._genai_model is None:
-            GeminiGateway._genai_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+            GeminiGateway._genai_model = genai.GenerativeModel(
+                'gemini-2.0-flash-lite'
+            )
         
-        # Initialize embeddings instance using Google SDK directly (reused across all instances)
         if GeminiGateway._embeddings is None:
             GeminiGateway._embeddings = GoogleGenerativeAIEmbeddings(
                 model="gemini-embedding-001"
@@ -103,6 +102,29 @@ class GeminiGateway:
         """Get the vector store instance (cached)."""
         return GeminiGateway._vector_store
 
+
+    @dynamic_prompt
+    def prompt_with_context(self, request: ModelRequest):
+        """Inject retrieved context into the prompt BEFORE the user message."""
+
+        last_user_msg = request.state["messages"][-1].text
+
+        retrieved_docs = self.vector_store.similarity_search(last_user_msg, k=5)
+        docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
+
+        system_message = (
+            "You are a helpful assistant. "
+            "Use ONLY the following retrieved context to answer. "
+            "If the context does not contain the answer, say you don't know.\n\n"
+            f"CONTEXT:\n{docs_content}"
+        )
+
+        # Return a message the Gemini middleware can understand
+        return [
+            {"role": "system", "parts": [system_message]}
+        ]
+
+
     def index_document(self, document: Document):
         try:
             loader = PyPDFLoader(f"./uploaded_files/{document.id}.pdf")
@@ -121,4 +143,34 @@ class GeminiGateway:
         except Exception as e:
             # Log the error (you might want to use proper logging)
             error_msg = f"Failed to index document {document.id}: {str(e)}"
+            raise RuntimeError(error_msg) from e
+
+    async def generate_response(self, prompt: str) -> str:
+        """Generate a response from the Gemini model with context."""
+        try:
+            # Retrieve context
+            retrieved_docs = self.vector_store.similarity_search(prompt, k=5)
+            docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
+
+            # Build structured prompt
+            final_prompt = f"""
+            Use the following context to answer the question.
+            If the context does not contain the answer, say you don't know.
+
+            CONTEXT:
+            {docs_content}
+
+            QUESTION:
+            {prompt}
+
+            ANSWER:
+            """.strip()
+
+            response = await self.model.generate_content_async(
+                contents=[final_prompt]
+            )
+
+            return response.text
+        except Exception as e:
+            error_msg = f"Failed to generate response: {str(e)}"
             raise RuntimeError(error_msg) from e
