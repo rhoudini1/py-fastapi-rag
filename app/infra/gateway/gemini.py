@@ -118,9 +118,6 @@ class GeminiGateway:
             # This will make one API call per chunk for embeddings
             self.vector_store.add_documents(documents=all_splits)
             
-            # Persist the vector store after adding documents
-            self.vector_store.persist()
-            
         except Exception as e:
             # Log the error (you might want to use proper logging)
             error_msg = f"Failed to index document {document.id}: {str(e)}"
